@@ -6,6 +6,9 @@
 
 **VNS/ВНС/Moodle AI overlay** is a lightweight, stealthy AI-powered screen overlay for real-time visual analysis. Designed to be unobtrusive, it helps users quickly analyze screen content using advanced Vision AI models via Groq.
 
+## Demonstration
+[▶ Watch video](https://github.com/user-attachments/assets/ab014efa-9cf0-4bd6-94ac-d9ad6d0412e2)
+
 **Windows support**
 
 ## Features
