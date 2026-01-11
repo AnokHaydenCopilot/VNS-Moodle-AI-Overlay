@@ -1,0 +1,4 @@
+groq
+keyboard
+Pillow
+python-dotenv
