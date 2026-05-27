@@ -45,9 +45,9 @@
 
 2.  Open `.env` and add your Groq API Key:
     ```ini
-    GROQ_API_KEY=gsk_your_api_key_here
+    GEMINI_API_KEY=your_api_key_here
     ```
-    *Get your free API key at [Groq Console](https://console.groq.com/keys).*
+    *Get your free API key at [Google AI Studio](https://aistudio.google.com/apikey).*
 
 ## Usage
 
@@ -64,7 +64,22 @@ python src/main.py
 | **`/`** | **Scan Screen:** Captures the current screen and asks the AI for an answer. |
 | **`.`** | **Toggle Visibility:** Hides or shows the overlay instantly. |
 | **`-`** | **Move/Lock:** Toggles "Drag Mode". When enabled, click and drag the text. |
+| **`]`** | **Cycle Model:** Switches to the next vision model in the list. |
 | **`=`** | **Quit:** Safely closes the application. |
+
+
+### Available Models (Free API) (cycled via `]`)
+
+Free-tier limits on Google AI Studio:
+
+| # | Model ID | RPD |
+| :--- | :--- | :--- |
+| 1 | `gemini-2.5-flash-lite` | 20 |
+| 2 | `gemini-3.1-flash-lite` *(default)* | 500 |
+| 3 | `gemini-2.5-flash` | 20 |
+| 4 | `gemini-3-flash` | 20 |
+| 5 | `gemini-3.5-flash` *(strongest)* | 20 |
+| 6 | `gemma-4-31b-it` | 1500 |
 
 ## ⚠️ Legal & Ethical Disclaimer
 

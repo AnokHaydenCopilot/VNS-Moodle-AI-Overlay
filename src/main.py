@@ -17,22 +17,30 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from groq import Groq
+    from google import genai
+    from google.genai import types
 except ImportError:
-    print("Groq library not found. Please install 'groq'.")
+    print("google-genai library not found. Please install 'google-genai'.")
     sys.exit(1)
 
-import base64
 from PIL import ImageGrab
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.getenv("GROQ_API_KEY")
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
-    print("Warning: GROQ_API_KEY not found in .env file")
+    print("Warning: GEMINI_API_KEY not found in .env file")
 
-MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
+MODELS = [
+    {"id": "gemini-2.5-flash-lite", "label": "2.5 Flash Lite (20/d)"},
+    {"id": "gemini-3.1-flash-lite", "label": "3.1 Flash Lite (500/d)"},
+    {"id": "gemini-2.5-flash",      "label": "2.5 Flash (20/d)"},
+    {"id": "gemini-3-flash",        "label": "3 Flash (20/d)"},
+    {"id": "gemini-3.5-flash",      "label": "3.5 Flash BEST (20/d)"},
+    {"id": "gemma-4-31b-it",        "label": "Gemma 4 31B (1500/d)"},
+]
+DEFAULT_MODEL_INDEX = 1
 
 SYSTEM_PROMPT = """You are a precise exam assistant. You will see a screenshot of a test question.
 Your task: Identify the correct answer immediately.
@@ -55,32 +63,38 @@ class StealthAgent:
         self.is_visible = True
         self.processing = False
         self.is_draggable = False
-        
+        self.model_index = DEFAULT_MODEL_INDEX
+        self._revert_after_id = None
+
         self.client = None
         self.setup_ai()
         self.setup_overlay()
         self.setup_hotkeys()
+        log(f"Model: {self.current_model()['label']}")
         log("Initialization complete.")
 
+    def current_model(self):
+        return MODELS[self.model_index]
+
     def setup_overlay(self):
-        self.root.overrideredirect(True)  
-        self.root.attributes("-topmost", True)  
-        
-        self.bg_color = "black" 
-        self.text_color = "#FFFFFF" 
-        
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
+
+        self.bg_color = "black"
+        self.text_color = "#FFFFFF"
+
         self.root.config(bg=self.bg_color)
-        
+
         try:
             self.root.attributes("-transparentcolor", self.bg_color)
-            self.root.attributes("-alpha", 0.5) 
+            self.root.attributes("-alpha", 0.5)
         except tk.TclError:
             pass
-        
+
         self.label = tk.Label(
-            self.root, 
+            self.root,
             textvariable=self.response_text,
-            font=("Consolas", 12, "bold"), 
+            font=("Consolas", 12, "bold"),
             fg=self.text_color,
             bg=self.bg_color,
             wraplength=400,
@@ -95,10 +109,10 @@ class StealthAgent:
 
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        
+
         if screen_width == 0: screen_width = 1920
         if screen_height == 0: screen_height = 1080
-        
+
         self.root.geometry(f"450x120+50+{screen_height - 180}")
 
     def start_move(self, event):
@@ -116,70 +130,53 @@ class StealthAgent:
 
     def setup_ai(self):
         try:
-            self.client = Groq(api_key=API_KEY)
-            log("AI Client configured (Groq).")
+            self.client = genai.Client(api_key=API_KEY)
+            log("AI Client configured (Google AI Studio).")
         except Exception as e:
             log(f"Error configuring AI: {e}")
             self.response_text.set("AI Config Error")
 
-    def encode_image(self, image):
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
-
     def process_screenshot(self):
-        """Captures screen, sends to Groq/LLaMA, updates overlay."""
+        """Captures screen, sends to Gemini, updates overlay."""
         if self.processing:
             log("Ignored '/' - already processing.")
             return
-            
+
         self.processing = True
         self.response_text.set("Analyzing...")
-        self.root.after(0, self.root.update) 
-        
+        self.root.after(0, self.root.update)
+
         start_time = time.time()
         try:
             log("Taking screenshot...")
             screenshot = ImageGrab.grab()
-            
-            base64_image = self.encode_image(screenshot)
-            
-            log(f"Sending request to Groq ({MODEL_NAME})...")
-            
-            chat_completion = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": SYSTEM_PROMPT + "\nFind the question and provide the answer."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}",
-                                },
-                            },
-                        ],
-                    }
+
+            model = self.current_model()
+            log(f"Sending request to Gemini ({model['id']})...")
+
+            response = self.client.models.generate_content(
+                model=model["id"],
+                contents=[
+                    SYSTEM_PROMPT + "\nFind the question and provide the answer.",
+                    screenshot,
                 ],
-                model=MODEL_NAME,
-                temperature=0.1,
+                config=types.GenerateContentConfig(temperature=0.1),
             )
-            
-            answer = chat_completion.choices[0].message.content
+
+            answer = (response.text or "").strip()
             if answer:
-                answer = answer.strip()
                 log(f"Response received ({time.time() - start_time:.2f}s): {answer}")
                 self.response_text.set(answer)
             else:
                 log("No text in response.")
                 self.response_text.set("No response")
-                
+
             if not self.is_visible:
                 self.root.after(0, self.show_overlay)
-                
+
         except Exception as e:
             log(f"Error processing: {e}")
-            self.response_text.set(f"Error: {str(e)[:20]}...")
+            self.response_text.set(f"Error: {str(e)[:40]}")
         finally:
             self.processing = False
 
@@ -198,11 +195,11 @@ class StealthAgent:
         """Handler for '.' key."""
         log("Key '.' pressed.")
         if self.is_visible:
-            self.root.withdraw() 
+            self.root.withdraw()
             self.is_visible = False
             log("Overlay hidden.")
         else:
-            self.root.deiconify() 
+            self.root.deiconify()
             self.is_visible = True
             log("Overlay shown.")
 
@@ -218,6 +215,33 @@ class StealthAgent:
             self.root.config(cursor="arrow")
             self.label.config(cursor="arrow")
 
+    def cycle_model(self):
+        """Handler for ']' key. Cycles to the next model and shows its name briefly."""
+        if self.processing:
+            log("Ignored ']' - request in progress.")
+            return
+        self.model_index = (self.model_index + 1) % len(MODELS)
+        model = self.current_model()
+        log(f"Model -> {model['id']}")
+        self.flash_status(f">> {model['label']}")
+
+    def flash_status(self, text, duration_ms=1800):
+        """Show a transient status in the overlay, then revert to 'Ready'."""
+        if not self.is_visible:
+            self.root.after(0, self.show_overlay)
+        self.response_text.set(text)
+        if self._revert_after_id is not None:
+            try:
+                self.root.after_cancel(self._revert_after_id)
+            except Exception:
+                pass
+        self._revert_after_id = self.root.after(duration_ms, self._revert_status)
+
+    def _revert_status(self):
+        self._revert_after_id = None
+        if not self.processing:
+            self.response_text.set("Ready")
+
     def quit_app(self):
         """Handler for '=' key to quit."""
         log("Quitting application...")
@@ -230,19 +254,20 @@ class StealthAgent:
             keyboard.add_hotkey('.', self.toggle_visibility)
             keyboard.add_hotkey('-', self.toggle_dragging)
             keyboard.add_hotkey('=', self.quit_app)
-            log("Hotkeys registered: '/' to capture, '.' to toggle, '-' to move, '=' to quit.")
+            keyboard.add_hotkey(']', self.cycle_model)
+            log("Hotkeys: '/' scan, '.' toggle, '-' move, ']' model, '=' quit.")
         except Exception as e:
             log(f"Hotkey Error: {e}")
             self.response_text.set("Hotkey Error (Run as Admin?)")
 
     def run(self):
         log("Application loop starting...")
-        print("Press '=' to quit application safely.")
+        print("Press '=' to quit application safe.")
         self.root.mainloop()
 
 if __name__ == "__main__":
     if not API_KEY:
-        print("Set GROQ_API_KEY in .env file first!")
+        print("Set GEMINI_API_KEY in .env file first!")
     else:
         app = StealthAgent()
         app.run()
